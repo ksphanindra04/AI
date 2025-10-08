@@ -1,0 +1,68 @@
+import random
+import math
+
+def print_board(state):
+    """Prints the chessboard with queens."""
+    n = len(state)
+    for i in range(n):
+        row = ""
+        for j in range(n):
+            if state[i] == j:
+                row += "Q "
+            else:
+                row += ". "
+        print(row)
+    print()
+
+def calculate_cost(state):
+    """Calculates the number of pairs of queens attacking each other."""
+    cost = 0
+    n = len(state)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if state[i] == state[j] or abs(state[i] - state[j]) == abs(i - j):
+                cost += 1
+    return cost
+
+def get_random_neighbor(state):
+    """Generates a random neighbor by moving one queen to a new column."""
+    neighbor = list(state)
+    i = random.randint(0, len(state) - 1)
+    new_col = random.randint(0, len(state) - 1)
+    while new_col == neighbor[i]:
+        new_col = random.randint(0, len(state) - 1)
+    neighbor[i] = new_col
+    return neighbor
+
+def simulated_annealing(n=8, initial_temp=1000, cooling_rate=0.99, min_temp=0.1):
+    """Simulated Annealing algorithm for N-Queens."""
+    current_state = [random.randint(0, n - 1) for _ in range(n)]
+    current_cost = calculate_cost(current_state)
+    temperature = initial_temp
+
+    print("Initial State:")
+    print_board(current_state)
+    print("Initial Cost:", current_cost, "\n")
+
+    while temperature > min_temp and current_cost > 0:
+        neighbor = get_random_neighbor(current_state)
+        neighbor_cost = calculate_cost(neighbor)
+
+        delta_e = current_cost - neighbor_cost
+        # Accept new state if it's better or with a probability based on temperature
+        if delta_e > 0 or math.exp(delta_e / temperature) > random.random():
+            current_state = neighbor
+            current_cost = neighbor_cost
+
+        temperature *= cooling_rate
+
+    print("Final State:")
+    print_board(current_state)
+    print("Final Cost:", current_cost)
+
+    if current_cost == 0:
+        print("Goal state reached — solution found!")
+    else:
+        print(" Reached near-optimal state, try rerunning for better result.")
+
+simulated_annealing(8)

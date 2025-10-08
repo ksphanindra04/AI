@@ -1,0 +1,60 @@
+import itertools
+
+# Helper function for logical operations
+def implies(p, q):
+    return (not p) or q
+
+def evaluate_kb(model):
+    """Evaluate the KB sentences for a given model."""
+    P, Q, R = model['P'], model['Q'], model['R']
+    
+    # Knowledge Base sentences
+    s1 = implies(Q, P)       # Q → P
+    s2 = implies(P, not Q)   # P → ¬Q
+    s3 = Q or R              # Q ∨ R
+    
+    return s1 and s2 and s3  # KB = (s1 ∧ s2 ∧ s3)
+
+def pl_true(sentence, model):
+    """Evaluate a propositional sentence in the model."""
+    P, Q, R = model['P'], model['Q'], model['R']
+    
+    if sentence == "R":
+        return R
+    elif sentence == "R->P":
+        return implies(R, P)
+    elif sentence == "Q->R":
+        return implies(Q, R)
+    else:
+        raise ValueError("Unknown query")
+
+def tt_entails(kb_symbols, query):
+    """Truth Table Enumeration algorithm to check entailment."""
+    symbols = kb_symbols
+    models = list(itertools.product([True, False], repeat=len(symbols)))
+    entail = True
+    
+    print(f"{'P':^5} {'Q':^5} {'R':^5} | {'KB':^5} | {'Query':^10}")
+    print("-" * 32)
+
+    for values in models:
+        model = dict(zip(symbols, values))
+        kb_value = evaluate_kb(model)
+        query_value = pl_true(query, model)
+        print(f"{str(model['P']):^5} {str(model['Q']):^5} {str(model['R']):^5} | {str(kb_value):^5} | {str(query_value):^10}")
+
+        if kb_value and not query_value:
+            entail = False
+    
+    return entail
+
+# Main Program
+symbols = ['P', 'Q', 'R']
+
+queries = ["R", "R->P", "Q->R"]
+
+for q in queries:
+    print(f"\nChecking if KB entails '{q}':")
+    result = tt_entails(symbols, q)
+    print(f"\nResult: KB {'entails' if result else 'does NOT entail'} '{q}'")
+    print("=" * 40)
