@@ -1,0 +1,73 @@
+import random
+
+def print_board(state):
+    """Prints the chessboard with queens."""
+    n = len(state)
+    for i in range(n):
+        row = ""
+        for j in range(n):
+            if state[i] == j:
+                row += "Q "
+            else:
+                row += ". "
+        print(row)
+    print()
+
+def calculate_cost(state):
+    """Calculate the number of pairs of queens attacking each other."""
+    cost = 0
+    n = len(state)
+    for i in range(n):
+        for j in range(i + 1, n):
+            if state[i] == state[j] or abs(state[i] - state[j]) == abs(i - j):
+                cost += 1
+    return cost
+
+def get_best_neighbor(state):
+    """Generate all neighbors and return the one with the lowest cost."""
+    n = len(state)
+    best_state = list(state)
+    best_cost = calculate_cost(state)
+
+    for i in range(n):
+        for j in range(n):
+            if j != state[i]:
+                neighbor = list(state)
+                neighbor[i] = j
+                cost = calculate_cost(neighbor)
+                if cost < best_cost:
+                    best_cost = cost
+                    best_state = neighbor
+    return best_state, best_cost
+
+def hill_climb(n=4):
+    """Hill Climbing algorithm for N-Queens."""
+    current_state = [random.randint(0, n - 1) for _ in range(n)]
+    current_cost = calculate_cost(current_state)
+
+    print("Initial State:")
+    print_board(current_state)
+    print("Initial Cost:", current_cost, "\n")
+
+    while True:
+        neighbor, neighbor_cost = get_best_neighbor(current_state)
+        if neighbor_cost >= current_cost:
+            # Local optimum reached
+            print("Final State (Local/Global Optimum):")
+            print_board(current_state)
+            print("Final Cost:", current_cost)
+            if current_cost == 0:
+                print("Goal state reached — solution found!")
+            else:
+                print("Stuck in local optimum.")
+            break
+
+        current_state = neighbor
+        current_cost = neighbor_cost
+
+        print("Next Step:")
+        print_board(current_state)
+        print("Cost:", current_cost, "\n")
+
+
+hill_climb(4)
