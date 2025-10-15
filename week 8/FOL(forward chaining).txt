@@ -1,0 +1,233 @@
+import copy
+import itertools
+
+# --- 1. LOGIC CLASSES (RECAP) ---
+
+class Term:
+    def __init__(self, value): self.value = value
+    def __eq__(self, other): return isinstance(other, Term) and self.value == other.value
+    def __hash__(self): return hash(self.value)
+    def __repr__(self): return str(self.value)
+
+class Constant(Term): pass
+
+class Variable(Term): pass
+
+class AtomicSentence(Term):
+    def __init__(self, predicate_symbol, arguments):
+        self.value = predicate_symbol
+        self.arguments = list(arguments)
+    def __eq__(self, other):
+        return (isinstance(other, AtomicSentence) and
+                self.value == other.value and
+                self.arguments == other.arguments)
+    def __hash__(self):
+        return hash((self.value, tuple(self.arguments)))
+    def __repr__(self):
+        return f"{self.value}({', '.join(map(str, self.arguments))})"
+
+class DefiniteClause:
+    def __init__(self, premises, conclusion):
+        self.premises = premises
+        self.conclusion = conclusion
+    def __repr__(self):
+        premise_str = ' ^ '.join(map(str, self.premises))
+        return f"({premise_str} => {self.conclusion})"
+
+UNIFY_FAILURE = 'UNIFY_FAILURE'
+UNIFY_NIL = None
+
+# --- 2. UNIFICATION & SUBSTITUTION HELPERS (RECAP) ---
+
+def occurs_in(var, term):
+    if var == term: return True
+    if isinstance(term, AtomicSentence):
+        return any(occurs_in(var, arg) for arg in term.arguments)
+    return False
+
+def apply_substitution(substitution, term):
+    if substitution is UNIFY_NIL or not substitution: return term
+    if isinstance(term, Variable): return substitution.get(term, term)
+    if isinstance(term, AtomicSentence):
+        new_arguments = [apply_substitution(substitution, arg) for arg in term.arguments]
+        return AtomicSentence(term.value, new_arguments)
+    if isinstance(term, list): return [apply_substitution(substitution, t) for t in term]
+    return term
+
+def compose_substitutions(subst_new, subst_current):
+    if subst_new is UNIFY_NIL or not subst_new: return subst_current
+    if subst_current is UNIFY_NIL or not subst_current: return subst_new
+    new_subst = {var: apply_substitution(subst_new, term) for var, term in subst_current.items()}
+    for var, term in subst_new.items():
+        if var not in subst_current: new_subst[var] = term
+    return new_subst
+
+def unify(psi1, psi2):
+    if isinstance(psi1, (Variable, Constant)) or isinstance(psi2, (Variable, Constant)):
+        if psi1 == psi2: return UNIFY_NIL
+        if isinstance(psi1, Variable):
+            if occurs_in(psi1, psi2): return UNIFY_FAILURE
+            return {psi1: psi2}
+        if isinstance(psi2, Variable):
+            if occurs_in(psi2, psi1): return UNIFY_FAILURE
+            return {psi2: psi1}
+        return UNIFY_FAILURE
+    if not isinstance(psi1, AtomicSentence) or not isinstance(psi2, AtomicSentence): return UNIFY_FAILURE
+    if psi1.value != psi2.value: return UNIFY_FAILURE
+    if len(psi1.arguments) != len(psi2.arguments): return UNIFY_FAILURE
+    subst = {}
+    for i in range(len(psi1.arguments)):
+        arg1 = psi1.arguments[i]; arg2 = psi2.arguments[i]
+        l1 = apply_substitution(subst, arg1); l2 = apply_substitution(subst, arg2)
+        S = unify(l1, l2)
+        if S == UNIFY_FAILURE: return UNIFY_FAILURE
+        if S is not UNIFY_NIL and S: subst = compose_substitutions(S, subst)
+    return subst
+
+# --- 3. FOL-FC-ASK CORE (RECAP) ---
+
+def STANDARDIZE_VARIABLES(rule, count=[0]):
+    new_vars = {}
+    def get_vars(term):
+        if isinstance(term, Variable): return {term}
+        if isinstance(term, AtomicSentence):
+            return set.union(*(get_vars(arg) for arg in term.arguments)) if term.arguments else set()
+        if isinstance(term, list):
+            return set.union(*(get_vars(t) for t in term)) if term else set()
+        return set()
+    all_vars = get_vars(rule.premises) | get_vars(rule.conclusion)
+    for var in all_vars: new_vars[var] = Variable(f"{var.value}_{count[0]}")
+    count[0] += 1
+    new_rule = copy.deepcopy(rule)
+    new_rule.premises = apply_substitution(new_vars, new_rule.premises)
+    new_rule.conclusion = apply_substitution(new_vars, new_rule.conclusion)
+    return new_rule
+
+def find_substitutions(premises, kb_facts, theta=UNIFY_NIL):
+    if not premises: return [theta]
+    p1 = premises[0]
+    rest_premises = premises[1:]
+    all_found_thetas = []
+    for fact_q in kb_facts:
+        p1_theta = apply_substitution(theta, p1)
+        s = unify(p1_theta, fact_q)
+        if s is not UNIFY_FAILURE:
+            new_theta = compose_substitutions(s, theta) if s is not UNIFY_NIL else theta
+            recursive_thetas = find_substitutions(rest_premises, kb_facts, new_theta)
+            all_found_thetas.extend(recursive_thetas)
+    return all_found_thetas
+
+def FOL_FC_ASK(KB, alpha):
+    facts = set(k for k in KB if isinstance(k, AtomicSentence))
+    rules = [k for k in KB if isinstance(k, DefiniteClause)]
+    
+    for fact_q in facts:
+        phi = unify(fact_q, alpha)
+        if phi is not UNIFY_FAILURE: return phi
+
+    while True:
+        new = set()
+        
+        for rule in rules:
+            rule_standardized = STANDARDIZE_VARIABLES(rule)
+            thetas = find_substitutions(rule_standardized.premises, facts)
+            
+            for theta in thetas:
+                q_prime = apply_substitution(theta, rule_standardized.conclusion)
+                
+                is_new = True
+                for existing_q in facts | new:
+                    if unify(q_prime, existing_q) is not UNIFY_FAILURE:
+                        is_new = False
+                        break
+                
+                if is_new:
+                    new.add(q_prime)
+                    phi = unify(q_prime, alpha)
+                    if phi is not UNIFY_FAILURE: return phi
+        
+        if not new: break
+        facts.update(new)
+        
+    return False
+
+# =========================================================
+# --- PROBLEM SPECIFIC IMPLEMENTATION ---
+# =========================================================
+
+# 1. Define Constants and Variables
+P = Variable('p')
+Q = Variable('q')
+R = Variable('r')
+X = Variable('x')
+
+ROBERT = Constant('Robert')
+A = Constant('A')
+AMERICA = Constant('America')
+T1 = Constant('T1') # Existential Instantiation constant
+
+# 2. Define the Definite Clauses (Rules)
+
+# R1: American(p) ^ Weapon(q) ^ Sells(p, q, r) ^ Hostile(r) => Criminal(p)
+R1 = DefiniteClause(
+    [AtomicSentence('American', [P]),
+     AtomicSentence('Weapon', [Q]),
+     AtomicSentence('Sells', [P, Q, R]),
+     AtomicSentence('Hostile', [R])],
+    AtomicSentence('Criminal', [P])
+)
+
+# R2: Missile(x) ^ Owns(A, x) => Sells(Robert, x, A)
+# The original logic uses a universally quantified implication, which can be instantiated as a definite clause:
+R2 = DefiniteClause(
+    [AtomicSentence('Missile', [X]),
+     AtomicSentence('Owns', [A, X])],
+    AtomicSentence('Sells', [ROBERT, X, A])
+)
+
+# R3: Missile(x) => Weapon(x)
+R3 = DefiniteClause(
+    [AtomicSentence('Missile', [X])],
+    AtomicSentence('Weapon', [X])
+)
+
+# R4: Enemy(x, America) => Hostile(x)
+R4 = DefiniteClause(
+    [AtomicSentence('Enemy', [X, AMERICA])],
+    AtomicSentence('Hostile', [X])
+)
+
+# 3. Define the Initial Facts (KB)
+# F1: Owns(A, T1)
+F1 = AtomicSentence('Owns', [A, T1])
+# F2: Missile(T1)
+F2 = AtomicSentence('Missile', [T1])
+# F3: American(Robert) (Assumed background knowledge)
+F3 = AtomicSentence('American', [ROBERT])
+# F4: Enemy(A, America) (Assumed background knowledge)
+F4 = AtomicSentence('Enemy', [A, AMERICA])
+
+
+# 4. Construct the Knowledge Base and Query
+KB = [R1, R2, R3, R4, F1, F2, F3, F4]
+QUERY = AtomicSentence('Criminal', [ROBERT])
+
+# 5. Execute the Forward Chaining
+print("--- FIRST-ORDER LOGIC FORWARD CHAINING ---")
+print(f"Goal: {QUERY}")
+
+result = FOL_FC_ASK(KB, QUERY)
+
+print("\n--- FINAL RESULT ---")
+if result is False:
+    print(f"Conclusion: {QUERY} cannot be proved.")
+else:
+    print(f"Conclusion: {QUERY} is PROVED.")
+    print(f"Substitution (if any): {result}")
+    
+    # Simple check to see the steps (The actual facts inferred are held in the 'facts' variable inside the function)
+    print("\nInferred steps (internal to the algorithm):")
+    print("1. Missile(T1) => Weapon(T1)")
+    print("2. Missile(T1) ^ Owns(A, T1) => Sells(Robert, T1, A)")
+    print("3. Enemy(A, America) => Hostile(A)")
+    print("4. All above premises unify with R1 => Criminal(Robert)")
