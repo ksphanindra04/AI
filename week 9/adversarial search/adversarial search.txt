@@ -1,0 +1,77 @@
+import math
+
+# Alpha-Beta Pruning Implementation
+
+def alpha_beta_search(state):
+    value, move = max_value(state, -math.inf, math.inf)
+    return move
+
+def max_value(state, alpha, beta):
+    if is_terminal(state):
+        return utility(state), None
+    
+    v = -math.inf
+    best_move = None
+    for move in actions(state):
+        min_val, _ = min_value(result(state, move), alpha, beta)
+        if min_val > v:
+            v = min_val
+            best_move = move
+        if v >= beta:
+            return v, best_move  # β cutoff
+        alpha = max(alpha, v)
+    return v, best_move
+
+def min_value(state, alpha, beta):
+    if is_terminal(state):
+        return utility(state), None
+    
+    v = math.inf
+    best_move = None
+    for move in actions(state):
+        max_val, _ = max_value(result(state, move), alpha, beta)
+        if max_val < v:
+            v = max_val
+            best_move = move
+        if v <= alpha:
+            return v, best_move  # α cutoff
+        beta = min(beta, v)
+    return v, best_move
+
+
+# --- Example setup (tree similar to your diagram) ---
+
+tree = {
+    'A': ['B', 'C'],
+    'B': ['B1', 'B2'],
+    'C': ['C1', 'C2'],
+    'B1': ['B1a', 'B1b'],
+    'B2': ['B2a', 'B2b'],
+    'C1': ['C1a', 'C1b'],
+    'C2': ['C2a', 'C2b']
+}
+
+# Terminal nodes with their utility values
+values = {
+    'B1a': 10, 'B1b': 9,
+    'B2a': 14, 'B2b': 18,
+    'C1a': 5,  'C1b': 4,
+    'C2a': 50, 'C2b': 3
+}
+
+def is_terminal(node):
+    return node not in tree
+
+def utility(node):
+    return values[node]
+
+def actions(node):
+    return tree.get(node, [])
+
+def result(node, move):
+    return move
+
+
+# Run the algorithm
+best_value, best_move = max_value('A', -math.inf, math.inf)
+print(f"Best move: {best_move}, Value: {best_value}")
